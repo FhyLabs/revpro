@@ -1,4 +1,4 @@
-const { createProxy } = require("revpro");
+const { createProxy } = require("../index");
 
 // proxy configuration
 const proxy = createProxy({
@@ -7,7 +7,7 @@ const proxy = createProxy({
 
   // upstream servers
   upstreams: [
-    { url: "http://localhost:3001", priority: 1 },
+    { url: "http://localhost:9000", priority: 1 },
     { url: "http://localhost:3002", priority: 2 }
   ],
 
@@ -62,8 +62,3 @@ async function waitForHealthy() {
   await waitForHealthy();
   console.log("Reverse Proxy running on port 8080");
 })();
-const { createProxy } = require('../index');
-const cfg = require('../config/development');
-const proxy = createProxy(cfg);
-proxy.start();
-console.log('Proxy started on', cfg.bind + ':' + cfg.port);

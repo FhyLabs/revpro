@@ -13,7 +13,7 @@ RevPro is a reverse-proxy built to efficiently manage the flow of application tr
 - Limit traffic with a rate limiter
 - IP filtering, Basic Auth, and CORS whitelisting
 - Limit request body size
-- Enable mini WAF (signature blocker + header sanitizer)
+- Enable WAF
 - Add custom plugins for logging, monitoring, or other needs
 - Prioritize specific servers with priority configuration
 - Set up weighted load balancing between servers
@@ -146,7 +146,7 @@ healthCheck: {
 | `basicAuth` | `{ username: string, password: string }` | undefined | Basic Auth |
 | `cors` | `{ allowedOrigins: string[] }` | `[]` | CORS Whitelist |
 | `bodyLimit` | `string` | `'2mb'` | Maximum size request body |
-| `waf` | `boolean` | `true` | Enable mini WAF (signature blocker + header sanitizer) |
+| `waf` | `boolean` | `true` | Enable WAF |
 
 **Example of use:**
 
@@ -260,7 +260,7 @@ const proxy = createProxy({
     bodyLimit: '5mb',  // maximum body size
     basicAuth: { username: 'admin', password: '12345' }, // basic auth
     cors: { allowedOrigins: ['http://localhost:8080'] }, // whitelist CORS
-    waf: true  // enable mini WAF (signature blocker + header sanitizer)
+    waf: true  // enable WAF
   },
 
   // plugins

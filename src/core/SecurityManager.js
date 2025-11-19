@@ -1,78 +1,124 @@
 const basicAuth = require('basic-auth');
-const getRawBody = require('raw-body');
 const RateLimiter = require('../middleware/security/rateLimiter');
 const IPFilter = require('../middleware/security/ipFilter');
+const corsMiddlewareFactory = require('../middleware/security/cors');
+const bodyLimitFactory = require('../middleware/security/bodyLimit');
 const WAF = require('../security/waf');
 const HeaderSanitizer = require('../security/headerSanitizer');
+const SignatureBlocker = require('../security/signatureBlocker');
 const { logger } = require('../utils/logger');
 
 class SecurityManager {
   constructor(opts = {}) {
     this.opts = opts || {};
+
     this.rateLimiter = new RateLimiter({ maxRequestsPerMinute: opts.maxRequestsPerMinute || 1200 });
     this.ipFilter = new IPFilter({ whitelist: opts.ipWhitelist || [], blacklist: opts.ipBlacklist || [] });
+    this.corsMiddlewareInstance = corsMiddlewareFactory(opts);
+    this.bodyLimitMiddlewareInstance = bodyLimitFactory(opts);
   }
 
   rateLimiterMiddleware(req, res, next) {
-    return this.rateLimiter.middleware(req, res, next);
+    try {
+      this.rateLimiter.middleware(req, res, next);
+    } catch (err) {
+      logger.error('RateLimiter error', { err: err.message, ip: req.ip || req.socket.remoteAddress, url: req.url });
+      next();
+    }
   }
 
   ipFilterMiddleware(req, res, next) {
-    return this.ipFilter.middleware(req, res, next);
+    try {
+      this.ipFilter.middleware(req, res, next);
+    } catch (err) {
+      logger.error('IPFilter error', { err: err.message, ip: req.ip || req.socket.remoteAddress, url: req.url });
+      next();
+    }
   }
 
   basicAuthMiddleware(req, res, next) {
-    if (!this.opts.basicAuth) return next();
-    const user = basicAuth(req) || {};
-    if (user.name === this.opts.basicAuth.username && user.pass === this.opts.basicAuth.password) return next();
-    res.setHeader('WWW-Authenticate', 'Basic realm="Protected"');
-    res.statusCode = 401; res.end('Unauthorized');
+    try {
+      if (!this.opts.auth) return next();
+      const user = basicAuth(req) || {};
+      if (user.name === this.opts.auth.username && user.pass === this.opts.auth.password) return next();
+
+      logger.warn('Unauthorized access attempt', { ip: req.ip || req.socket.remoteAddress, url: req.url, username: user.name });
+      res.setHeader('WWW-Authenticate', `Basic realm="${this.opts.auth.realm || 'Protected'}"`); // ganti juga
+      res.statusCode = 401;
+      res.end('Unauthorized');
+    } catch (err) {
+      logger.error('Auth middleware error', { err: err.message, ip: req.ip || req.socket.remoteAddress, url: req.url });
+      next(err);
+    }
   }
 
   corsMiddleware(req, res, next) {
-    const cors = this.opts.cors || { enabled: false };
-    if (!cors.enabled) return next();
-    const origin = req.headers.origin;
-    if (cors.allowOrigins.includes('*') || (origin && cors.allowOrigins.includes(origin))) {
-      res.setHeader('Access-Control-Allow-Origin', origin || '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-      if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return; }
+    try {
+      this.corsMiddlewareInstance(req, res, next);
+    } catch (err) {
+      logger.error('CORS middleware error', { err: err.message, ip: req.ip || req.socket.remoteAddress, url: req.url });
+      next();
     }
-    next();
   }
 
   bodyLimitMiddleware(req, res, next) {
     const max = this.opts.maxBodyBytes || 2 * 1024 * 1024;
-    const len = req.headers['content-length'];
-    if (len && Number(len) > max) { res.statusCode = 413; res.end('Payload Too Large'); return; }
-    getRawBody(req, { length: max, limit: max }).then(buf => { req.rawBody = buf; next(); }).catch(err => { next(); });
+
+    const skipPaths = this.opts.bodyLimitSkipPaths || ['/healthz', '/__proxy__/status'];
+    if (skipPaths.includes(req.path) || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      return next();
+    }
+
+    const contentLength = req.headers['content-length'] || 0;
+    if (Number(contentLength) > max) {
+      logger.warn('Payload Too Large', { ip: req.ip || req.socket.remoteAddress, url: req.url, contentLength });
+      res.statusCode = 413;
+      res.end('Payload Too Large');
+      return;
+    }
+
+    if (Number(contentLength) === 0) return next();
+
+    try {
+      const result = this.bodyLimitMiddlewareInstance(req, res, next);
+      if (result && typeof result.then === 'function') {
+        result.catch(err => {
+          logger.warn('Invalid Body', { err: err.message, ip: req.ip || req.socket.remoteAddress, url: req.url });
+          res.statusCode = 400;
+          res.end('Invalid Body');
+        });
+      }
+    } catch (err) {
+      logger.warn('Body limit middleware error', { err: err.message, ip: req.ip || req.socket.remoteAddress, url: req.url });
+      res.statusCode = 400;
+      res.end('Invalid Body');
+    }
   }
 
-	wafMiddleware(req, res, next) {
-	  try {
-		HeaderSanitizer.sanitize(req);
+  wafMiddleware(req, res, next) {
+    try {
+      HeaderSanitizer.sanitize(req);
 
-		const SignatureBlocker = require('../security/signatureBlocker');
-		if (SignatureBlocker.blocked(req)) {
-		  logger.warn('Blocked malicious signature', { headers: req.headers });
-		  res.statusCode = 403;
-		  res.end('Forbidden');
-		  return;
-		}
+      if (SignatureBlocker.blocked(req)) {
+        logger.warn('Blocked malicious signature', { ip: req.ip || req.socket.remoteAddress, url: req.url, headers: req.headers });
+        res.statusCode = 403;
+        res.end('Forbidden');
+        return;
+      }
 
-		if (WAF.inspect(req)) {
-		  res.statusCode = 403;
-		  res.end('Forbidden');
-		  return;
-		}
+      if (WAF.inspect(req)) {
+        logger.warn('Blocked request by WAF', { ip: req.ip || req.socket.remoteAddress, url: req.url });
+        res.statusCode = 403;
+        res.end('Forbidden');
+        return;
+      }
 
-	  } catch (e) {
-		logger.error('WAF inspection failed', { err: e && e.message });
-	  }
+    } catch (err) {
+      logger.error('WAF inspection failed', { err: err.message, ip: req.ip || req.socket.remoteAddress, url: req.url });
+    }
 
-	  next();
-	}
+    next();
+  }
 }
 
 module.exports = SecurityManager;

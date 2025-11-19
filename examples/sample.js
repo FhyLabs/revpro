@@ -1,63 +1,57 @@
 const { createProxy } = require("../index");
 
-// proxy configuration
+// Create a proxy instance with configuration
 const proxy = createProxy({
-  port: 8080,
-  bind: '127.0.0.1',
+  port: 8080,                // Proxy server port
+  bind: '127.0.0.1',         // Bind address
 
-  // upstream servers
+  // Upstream backend servers
   upstreams: [
     { url: "http://localhost:9000", priority: 1 },
     { url: "http://localhost:3002", priority: 2 }
   ],
 
-  // log request
-  logFormat: 'dev',
-  logging: { enabled: true },
+  // Logging configuration
+  logFormat: 'dev',           // morgan log format
+  logging: { enabled: true }, // Enable logging
 
-  // health check
-  healthCheck: {
-    interval: 3000,  // every 3 seconds check upstream
-    timeout: 2000,   // timeout request health-check
-    retry: 2         // retry if failed
-  },
+  // Health check configuration
+  healthCheckPath: '/healthz',
+  healthCheckInterval: 3000,  // Check interval in ms
+  healthCheckTimeout: 2000,   // Timeout for probe requests
 
-  // security suite
-  security: {
-    rateLimit: { windowMs: 60000, max: 100 },  // max 100 req per menit
-    ipFilter: { allow: ['127.0.0.1'], block: [] }, // whitelist IP
-    bodyLimit: '5mb',  // maximum body size
-    basicAuth: { username: 'admin', password: '12345' }, // basic auth
-    cors: { allowedOrigins: ['http://localhost:8080'] }, // whitelist CORS
-    waf: true  // enable mini WAF (signature blocker + header sanitizer)
-  },
+  // Security options
+  maxRequestsPerMinute: 100,  // Rate limit
+  ipWhitelist: ['127.0.0.1'], // Allowed IPs ('*' for all)
+  ipBlacklist: [],            // Blocked IPs
+  auth: { username: 'admin', password: '12345' }, // Basic auth
+  cors: { enabled: true, allowOrigins: ['*'] },        // CORS settings
+  maxBodyBytes: 5 * 1024 * 1024, // Maximum body size (5 MB)
+  waf: true,                    // Enable mini WAF
 
-  // plugins
-  plugins: [
-    './plugins/logger.js',  // logging plugin example
-  ],
+  // Plugins to enhance functionality
+  plugins: ['./plugins/logger.js'],
 
-  // HTTPS support (optional, activate if you already have a cert & key)
-  https: {
-    enabled: false,
-    key: null,
-    cert: null
-  }
+  // HTTPS options (optional)
+  https: { enabled: false, key: null, cert: null },
+
+  // Enable trust proxy
+  trustProxy: true
 });
 
-// helper: wait for upstream to be healthy before logging ready
+// Helper function to wait until at least one upstream is healthy
 async function waitForHealthy() {
   const start = Date.now();
-  while (Date.now() - start < 5000) { // wait max 5 seconds
+  while (Date.now() - start < 5000) { // Maximum wait: 5 seconds
     const upstreams = proxy._internal.upstreamManager.list();
-    if (upstreams.some(u => u.healthy)) return;
+    if (upstreams.some(u => u.healthy)) return; // Exit if any upstream is healthy
     await new Promise(r => setTimeout(r, 500));
   }
   console.warn("Warning: no upstream healthy after wait period");
 }
 
-// run proxy
+// Start the proxy and wait for upstream readiness
 (async () => {
-  proxy.start();
-  await waitForHealthy();
+  proxy.start();           // Start HTTP/HTTPS proxy server
+  await waitForHealthy();  // Wait until at least one upstream is healthy
 })();

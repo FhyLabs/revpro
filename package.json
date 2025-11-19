@@ -1,6 +1,6 @@
 {
   "name": "@fhylabs/revpro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "RevPro is a reverse-proxy built to efficiently manage the flow of application traffic.",
   "main": "index.js",
   "bin": {

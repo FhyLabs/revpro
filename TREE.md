@@ -15,7 +15,6 @@ RevPro/
 ├── src/
 │   ├── core/
 │   │   ├── ProxyEngine.js
-│   │   ├── ServerEngine.js
 │   │   ├── UpstreamManager.js
 │   │   ├── SecurityManager.js
 │   │   ├── MiddlewareLoader.js
@@ -29,18 +28,12 @@ RevPro/
 │   │   │   ├── basicAuth.js
 │   │   │   ├── cors.js
 │   │   │   └── bodyLimit.js
-│   │   ├── logging/
-│   │   │   └── requestLogger.js
 │   │   └── system/
 │   │       ├── trustProxy.js
 │   │       └── disablePoweredBy.js
 │   │
 │   ├── utils/
-│   │   ├── logger.js
-│   │   ├── ip.js
-│   │   ├── parseOptions.js
-│   │   ├── validator.js
-│   │   └── events.js
+│   │   └── logger.js
 │   │
 │   ├── network/
 │   │   ├── healthChecker.js
@@ -52,15 +45,8 @@ RevPro/
 │   │   ├── signatureBlocker.js
 │   │   └── headerSanitizer.js
 │   │
-│   ├── types/
-│   │   ├── options.d.ts
-│   │   └── internal.d.ts
-│   │
 │   └── index.js
 │
 └── examples/
-    ├── simple.js
-    ├── multi-upstream.js
-    ├── with-security.js
-    └── plugin-example.js
+    └── simple.js
 ```

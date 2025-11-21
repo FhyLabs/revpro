@@ -245,7 +245,7 @@ const proxy = createProxy({
 
   // Upstream backend servers
   upstreams: [
-    { url: "http://localhost:3001", priority: 1 },
+    { url: "https://fhylabs.com", priority: 1 },
     { url: "http://localhost:3002", priority: 2 }
   ],
 
@@ -262,14 +262,14 @@ const proxy = createProxy({
   maxRequestsPerMinute: 100,  // Rate limit
   ipWhitelist: ['127.0.0.1'], // Allowed IPs ('*' for all)
   ipBlacklist: [],            // Blocked IPs
-  auth: { username: 'admin', password: '12345' }, // Basic auth
+  auth: { username: 'admin', password: '12345', realm: 'Restricted' }, // Basic auth
   cors: { enabled: true, allowOrigins: ['*'] },        // CORS settings
   maxBodyBytes: 5 * 1024 * 1024, // Maximum body size (5 MB)
   waf: true,                    // Enable mini WAF
 
   // Plugins to enhance functionality
   plugins: [
-    require('./plugins/logger.js')
+    require('./plugins/Logger.js')
   ],
 
   // HTTPS options (optional)
